@@ -25,6 +25,7 @@ from bot.services.search import (
     get_search_filters,
     get_listing_page,
     get_listing_with_owner,
+    update_search_offset,
 )
 from bot.middlewares.inactivity import MAIN_MENU_STATE
 
@@ -77,7 +78,7 @@ async def start_search(message: Message, state: FSMContext, session, bot: Bot):
             search_category=filters.category,
             search_age=filters.age_group,
             search_district=filters.district,
-            search_offset=0,
+            search_offset=filters.offset or 0,
             search_skip_count=0,
             search_hint_shown=False,
         )
@@ -107,7 +108,7 @@ async def start_search_callback(callback: CallbackQuery, state: FSMContext, sess
             search_category=filters.category,
             search_age=filters.age_group,
             search_district=filters.district,
-            search_offset=0,
+            search_offset=filters.offset or 0,
             search_skip_count=0,
             search_hint_shown=False,
         )
@@ -217,6 +218,9 @@ async def search_next(callback: CallbackQuery, state: FSMContext, session):
     hint_shown = data.get("search_hint_shown", False)
     offset = data.get("search_offset", 0) + 1
     await state.update_data(search_offset=offset, search_skip_count=skip_count)
+    user_id = data.get("search_user_id")
+    if user_id is not None:
+        await update_search_offset(session, user_id, offset)
     if skip_count >= 7 and not hint_shown:
         await callback.message.delete()
         from aiogram.types import InlineKeyboardButton
@@ -270,6 +274,9 @@ async def search_continue_after_response(callback: CallbackQuery, state: FSMCont
     data = await state.get_data()
     offset = data.get("search_offset", 0) + 1
     await state.update_data(search_offset=offset)
+    user_id = data.get("search_user_id")
+    if user_id is not None:
+        await update_search_offset(session, user_id, offset)
     await state.set_state(SearchStates.showing)
     await callback.message.delete()
     await _send_listing_at_offset(bot=callback.bot, chat_id=callback.message.chat.id, state=state, session=session)

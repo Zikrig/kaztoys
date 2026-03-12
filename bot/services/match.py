@@ -46,6 +46,10 @@ async def confirm_deal(session: AsyncSession, match_id: int, user_id: int) -> bo
         match.response_owner_confirmed = True
     else:
         return False
+    listing = await session.get(Listing, match.listing_id)
+    if listing and listing.status == "open":
+        # As soon as one side confirms the exchange, hide the listing from active feeds.
+        listing.status = "closed"
     if match.listing_owner_confirmed and match.response_owner_confirmed:
         match.status = "both_confirmed"
         from bot.services.user import increment_confirmed_deals

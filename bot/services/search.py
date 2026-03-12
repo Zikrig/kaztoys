@@ -20,8 +20,9 @@ async def save_search_filters(
         sf.category = category
         sf.age_group = age_group
         sf.district = district
+        sf.offset = 0
     else:
-        sf = SearchFilters(user_id=user_id, category=category, age_group=age_group, district=district)
+        sf = SearchFilters(user_id=user_id, category=category, age_group=age_group, district=district, offset=0)
         session.add(sf)
     await session.commit()
 
@@ -29,6 +30,17 @@ async def save_search_filters(
 async def get_search_filters(session: AsyncSession, user_id: int) -> SearchFilters | None:
     result = await session.execute(select(SearchFilters).where(SearchFilters.user_id == user_id))
     return result.scalar_one_or_none()
+
+
+async def update_search_offset(session: AsyncSession, user_id: int, offset: int) -> None:
+    result = await session.execute(select(SearchFilters).where(SearchFilters.user_id == user_id))
+    sf = result.scalar_one_or_none()
+    if sf is None:
+        sf = SearchFilters(user_id=user_id, offset=offset)
+        session.add(sf)
+    else:
+        sf.offset = offset
+    await session.commit()
 
 
 async def get_listing_page(
