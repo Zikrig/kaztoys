@@ -65,6 +65,46 @@ async def my_responses(message: Message, state: FSMContext, session):
     await message.answer("Вернитесь в меню.", reply_markup=main_menu_keyboard())
 
 
+@router.callback_query(F.data == "menu:my_responses")
+async def my_responses_callback(callback: CallbackQuery, state: FSMContext, session):
+    if not callback.from_user:
+        await callback.answer()
+        return
+    await state.clear()
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
+    if not user:
+        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    responses = await get_responses_by_user(session, user.id)
+    if not responses:
+        await callback.message.answer("У вас пока нет откликов.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    from bot.models.user import User as UserModel
+    for resp in responses:
+        listing = await get_listing_by_id(session, resp.listing_id)
+        if not listing:
+            continue
+        owner = await session.get(UserModel, listing.user_id)
+        name = (owner.first_name or "Пользователь") if owner else "Пользователь"
+        deals = (owner.confirmed_deals or 0) if owner else 0
+        status = "Ожидает выбора" if not resp.chosen else f"Выбран (заявка от {name})"
+        caption = (
+            f"{name} ({deals} подтв. сделок)\n"
+            f"Код заявки {listing.code}. {listing.description}\n\n"
+            f"Ваш отклик. Код {resp.code}. {resp.description}\n\n"
+            f"Статус: {status}"
+        )
+        try:
+            await callback.message.answer_photo(photo=listing.photo_file_id or "", caption=caption)
+            await callback.message.answer_photo(photo=resp.photo_file_id or "")
+        except Exception:
+            await callback.message.answer(caption)
+    await callback.message.answer("Вернитесь в меню.", reply_markup=main_menu_keyboard())
+    await callback.answer()
+
+
 @router.message(F.text == "Предложить обмен")
 async def response_offer_ignore(message: Message):
     await message.answer("Нажмите кнопку «Предложить обмен» под заявкой в поиске.")
@@ -135,15 +175,15 @@ async def response_use_listing(callback: CallbackQuery, state: FSMContext, sessi
         response_description=my_listing.description,
         response_source="existing",
     )
-    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-    confirm_kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BTN_CONFIRM_SEND), KeyboardButton(text=BTN_EDIT)],
-            [KeyboardButton(text=BTN_BACK_TO_MENU)],
-        ],
-        resize_keyboard=True,
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=BTN_CONFIRM_SEND, callback_data="response_confirm:send"),
+        InlineKeyboardButton(text=BTN_EDIT, callback_data="response_confirm:edit"),
     )
+    builder.row(InlineKeyboardButton(text=BTN_BACK_TO_MENU, callback_data="menu:main"))
     preview = (
         f"Код отклика: {code}\n"
         f"На заявку: {target_listing.code}\n"
@@ -251,15 +291,14 @@ async def response_description_received(message: Message, state: FSMContext, ses
     photo_file_id = data["response_photo_file_id"]
     description = message.text
     await state.update_data(response_description=description)
-    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-
-    confirm_kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BTN_CONFIRM_SEND), KeyboardButton(text=BTN_EDIT)],
-            [KeyboardButton(text=BTN_BACK_TO_MENU)],
-        ],
-        resize_keyboard=True,
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=BTN_CONFIRM_SEND, callback_data="response_confirm:send"),
+        InlineKeyboardButton(text=BTN_EDIT, callback_data="response_confirm:edit"),
     )
+    builder.row(InlineKeyboardButton(text=BTN_BACK_TO_MENU, callback_data="menu:main"))
     preview = (
         f"Код отклика: {code}\n"
         f"На заявку: {target_listing.code}\n"
@@ -267,25 +306,30 @@ async def response_description_received(message: Message, state: FSMContext, ses
         "Подтвердите отправку отклика."
     )
     await state.set_state(ResponseStates.confirm)
-    await message.answer_photo(photo=photo_file_id, caption=preview, reply_markup=confirm_kb)
+    await message.answer_photo(photo=photo_file_id, caption=preview, reply_markup=builder.as_markup())
 
 
-@router.message(ResponseStates.confirm, F.text == BTN_CONFIRM_SEND)
-async def response_confirm_send(message: Message, state: FSMContext, session, bot: Bot):
+@router.callback_query(ResponseStates.confirm, F.data == "response_confirm:send")
+async def response_confirm_send(callback: CallbackQuery, state: FSMContext, session, bot: Bot):
     data = await state.get_data()
     target_listing_id = data.get("target_listing_id")
-    if not target_listing_id or not message.from_user:
+    if not target_listing_id or not callback.from_user:
         await state.clear()
         await state.set_state(MAIN_MENU_STATE)
-        await message.answer("Сессия истекла.", reply_markup=main_menu_keyboard())
+        await callback.message.answer("Сессия истекла.", reply_markup=main_menu_keyboard())
+        await callback.answer()
         return
     target_listing = await get_listing_by_id(session, target_listing_id)
     if not target_listing or target_listing.status != "open":
         await state.clear()
         await state.set_state(MAIN_MENU_STATE)
-        await message.answer("Заявка закрыта.", reply_markup=main_menu_keyboard())
+        await callback.message.answer("Заявка закрыта.", reply_markup=main_menu_keyboard())
+        await callback.answer()
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if not callback.from_user:
+        await callback.answer()
+        return
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
     if not user:
         return
     resp = await create_response(
@@ -306,20 +350,21 @@ async def response_confirm_send(message: Message, state: FSMContext, session, bo
             InlineKeyboardButton(text=BTN_CONTINUE_SEARCH, callback_data="search_continue_after_response"),
             InlineKeyboardButton(text=BTN_NO_BACK_MENU, callback_data="search_back_menu"),
         )
-        await message.answer("Отклик отправлен. Продолжить поиск?", reply_markup=builder.as_markup())
+        await callback.message.answer("Отклик отправлен. Продолжить поиск?", reply_markup=builder.as_markup())
     else:
         await state.clear()
         await state.set_state(MAIN_MENU_STATE)
-        await message.answer("Отклик отправлен.", reply_markup=main_menu_keyboard())
+        await callback.message.answer("Отклик отправлен.", reply_markup=main_menu_keyboard())
+    await callback.answer()
 
 
-@router.message(ResponseStates.confirm, F.text == BTN_EDIT)
-async def response_confirm_edit(message: Message, state: FSMContext, session):
+@router.callback_query(ResponseStates.confirm, F.data == "response_confirm:edit")
+async def response_confirm_edit(callback: CallbackQuery, state: FSMContext, session):
     data = await state.get_data()
     if data.get("response_source") == "existing":
-        if not message.from_user:
+        if not callback.from_user:
             return
-        user = await get_user_by_telegram_id(session, message.from_user.id)
+        user = await get_user_by_telegram_id(session, callback.from_user.id)
         if not user:
             return
         listings = await get_open_listings_by_user(session, user.id)
@@ -331,17 +376,15 @@ async def response_confirm_edit(message: Message, state: FSMContext, session):
             builder.row(InlineKeyboardButton(text=f"Отправить эту: {lst.code}", callback_data=f"resp_use:{lst.id}"))
         builder.row(InlineKeyboardButton(text="Создать новую", callback_data="resp_create_new"))
         await state.set_state(ResponseStates.choose_listing)
-        await message.answer("Выберите имеющуюся заявку или создайте новую для отклика:", reply_markup=builder.as_markup())
+        await callback.message.answer("Выберите имеющуюся заявку или создайте новую для отклика:", reply_markup=builder.as_markup())
+        await callback.answer()
         return
     await state.set_state(ResponseStates.wait_photo)
-    await message.answer(
+    await callback.message.answer(
         f"Код отклика: {data['response_code']}. Сделайте фото игрушки с бумажкой с этим кодом и отправьте фото.",
         reply_markup=back_to_menu_keyboard(),
     )
+    await callback.answer()
 
 
-@router.message(ResponseStates.confirm, F.text == BTN_BACK_TO_MENU)
-async def response_confirm_back(message: Message, state: FSMContext):
-    await state.clear()
-    await state.set_state(MAIN_MENU_STATE)
-    await message.answer("Главное меню.", reply_markup=main_menu_keyboard())
+# back handled by global menu:main callback

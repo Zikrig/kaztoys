@@ -40,6 +40,37 @@ async def my_subscription(message: Message, state: FSMContext, session):
         )
 
 
+@router.callback_query(F.data == "menu:subscription")
+async def my_subscription_callback(callback, state: FSMContext, session):
+    await state.clear()
+    if not callback.from_user:
+        await callback.answer()
+        return
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
+    if not user:
+        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    sub = await get_active_subscription(session, user.id)
+    if sub:
+        now = datetime.now(timezone.utc)
+        days_left = (sub.expires_at - now).days
+        await callback.message.answer(
+            f"Тариф стандарт. Осталось {days_left} дн.",
+            reply_markup=main_menu_keyboard(),
+        )
+    else:
+        from aiogram.types import InlineKeyboardButton
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="Подключить", callback_data="sub_connect"))
+        await callback.message.answer(
+            "У вас нет активной подписки. Подключите доступ на 2 недели.",
+            reply_markup=builder.as_markup(),
+        )
+    await callback.answer()
+
+
 @router.callback_query(F.data == "sub_connect")
 async def sub_connect(callback, session):
     from bot.services.subscription import create_subscription

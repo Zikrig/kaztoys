@@ -57,6 +57,26 @@ async def open_unconfirmed_matches(message, state: FSMContext, session, bot: Bot
     await message.answer("Вернитесь в меню.", reply_markup=main_menu_keyboard())
 
 
+@router.callback_query(F.data == "menu:open_unconfirmed")
+async def open_unconfirmed_matches_callback(callback: CallbackQuery, state: FSMContext, session, bot: Bot):
+    await state.clear()
+    if not callback.from_user:
+        await callback.answer()
+        return
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
+    if not user:
+        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    has_matches = await send_pending_matches(callback.message, session, user)
+    if not has_matches:
+        await callback.message.answer("Нет неподтверждённых сделок.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    await callback.message.answer("Вернитесь в меню.", reply_markup=main_menu_keyboard())
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("listings_resp:"))
 async def show_responses_for_listing(callback: CallbackQuery, state: FSMContext, session):
     listing_id = int(callback.data.split(":", 1)[1])

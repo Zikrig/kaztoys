@@ -88,6 +88,38 @@ async def start_search(message: Message, state: FSMContext, session, bot: Bot):
     await message.answer(SEARCH_WHAT, reply_markup=category_search_keyboard())
 
 
+@router.callback_query(F.data == "menu:start_search")
+async def start_search_callback(callback: CallbackQuery, state: FSMContext, session, bot: Bot):
+    if not callback.from_user:
+        await callback.answer()
+        return
+    await state.clear()
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
+    if not user:
+        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    filters = await get_search_filters(session, user.id)
+    if filters and filters.category and filters.age_group and filters.district:
+        await state.update_data(
+            search_user_id=user.id,
+            search_category=filters.category,
+            search_age=filters.age_group,
+            search_district=filters.district,
+            search_offset=0,
+            search_skip_count=0,
+            search_hint_shown=False,
+        )
+        await state.set_state(SearchStates.showing)
+        await _send_listing_at_offset(bot=bot, chat_id=callback.message.chat.id, state=state, session=session)
+        await callback.answer()
+        return
+    await state.update_data(search_user_id=user.id, search_skip_count=0, search_hint_shown=False)
+    await state.set_state(SearchStates.wait_category)
+    await callback.message.answer(SEARCH_WHAT, reply_markup=category_search_keyboard())
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("search_cat:"))
 async def search_cat_chosen(callback: CallbackQuery, state: FSMContext):
     slug = callback.data.split(":", 1)[1]

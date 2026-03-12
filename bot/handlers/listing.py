@@ -114,6 +114,37 @@ async def start_listing_create(message: Message, state: FSMContext, session):
     await message.answer(CODE_PROMPT.format(code=code), reply_markup=back_to_menu_keyboard())
 
 
+@router.callback_query(F.data == "menu:new_listing")
+async def start_listing_create_callback(callback: CallbackQuery, state: FSMContext, session):
+    if not callback.from_user:
+        await callback.answer()
+        return
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
+    if not user:
+        await callback.message.answer("Сначала нажмите /start.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    active = await has_active_subscription(session, user.id)
+    if not active:
+        from aiogram.types import InlineKeyboardButton
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="Купить доступ на 2 недели", callback_data="listing_buy_sub"))
+        builder.row(InlineKeyboardButton(text="В главное меню", callback_data="menu:main"))
+        await callback.message.answer(
+            "Для создания заявки нужна подписка. Подключить доступ на 2 недели?",
+            reply_markup=builder.as_markup(),
+        )
+        await callback.answer()
+        return
+    code = await generate_unique_code(session)
+    await state.update_data(listing_code=code, listing_user_id=user.id)
+    await state.set_state(ListingCreateStates.wait_photo)
+    await callback.message.answer(CODE_PROMPT.format(code=code), reply_markup=back_to_menu_keyboard())
+    await callback.answer()
+
+
 @router.callback_query(F.data == "listing_buy_sub")
 async def listing_buy_sub(callback: CallbackQuery, state: FSMContext, session):
     if not callback.from_user:
@@ -210,16 +241,16 @@ async def listing_description_received(message: Message, state: FSMContext, sess
     preview = (
         f"Код заявки: {code}\nКатегория: {cat_label}\nВозраст: {age_label}\nОписание: {description}\n\n{CONFIRM_LISTING}"
     )
-    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-    confirm_kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BTN_CONFIRM_SEND), KeyboardButton(text=BTN_EDIT)],
-            [KeyboardButton(text=BTN_BACK_TO_MENU)],
-        ],
-        resize_keyboard=True,
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=BTN_CONFIRM_SEND, callback_data="listing_confirm:send"),
+        InlineKeyboardButton(text=BTN_EDIT, callback_data="listing_confirm:edit"),
     )
+    builder.row(InlineKeyboardButton(text=BTN_BACK_TO_MENU, callback_data="menu:main"))
     await state.set_state(ListingCreateStates.confirm)
-    await message.answer_photo(photo=photo_file_id, caption=preview, reply_markup=confirm_kb)
+    await message.answer_photo(photo=photo_file_id, caption=preview, reply_markup=builder.as_markup())
 
 
 @router.message(ListingCreateStates.wait_description)
@@ -227,8 +258,8 @@ async def listing_description_not_text(message: Message):
     await message.answer(NOT_TEXT)
 
 
-@router.message(ListingCreateStates.confirm, F.text == BTN_CONFIRM_SEND)
-async def listing_confirm_send(message: Message, state: FSMContext, session, bot):
+@router.callback_query(ListingCreateStates.confirm, F.data == "listing_confirm:send")
+async def listing_confirm_send(callback: CallbackQuery, state: FSMContext, session, bot):
     data = await state.get_data()
     user_id = data["listing_user_id"]
     code = data["listing_code"]
@@ -248,23 +279,21 @@ async def listing_confirm_send(message: Message, state: FSMContext, session, bot
     )
     await state.clear()
     await state.set_state(MAIN_MENU_STATE)
-    await message.answer(LISTING_SENT, reply_markup=main_menu_keyboard())
+    await callback.message.answer(LISTING_SENT, reply_markup=main_menu_keyboard())
     await _broadcast_new_listing(session, bot, listing, user_id)
+    await callback.answer()
 
 
-@router.message(ListingCreateStates.confirm, F.text == BTN_EDIT)
-async def listing_confirm_edit(message: Message, state: FSMContext):
+@router.callback_query(ListingCreateStates.confirm, F.data == "listing_confirm:edit")
+async def listing_confirm_edit(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ListingCreateStates.wait_photo)
     data = await state.get_data()
     code = data["listing_code"]
-    await message.answer(CODE_PROMPT.format(code=code), reply_markup=back_to_menu_keyboard())
+    await callback.message.answer(CODE_PROMPT.format(code=code), reply_markup=back_to_menu_keyboard())
+    await callback.answer()
 
 
-@router.message(ListingCreateStates.confirm, F.text == BTN_BACK_TO_MENU)
-async def listing_confirm_cancel(message: Message, state: FSMContext):
-    await state.clear()
-    await state.set_state(MAIN_MENU_STATE)
-    await message.answer("Главное меню.", reply_markup=main_menu_keyboard())
+# back handled by global menu:main callback
 
 
 # My listings: show list and handle "Посмотреть отклики" / "Закрыть заявку"
@@ -293,6 +322,37 @@ async def my_listings(message: Message, state: FSMContext, session):
         )
         await message.answer_photo(photo=lst.photo_file_id or "", caption=caption, reply_markup=builder.as_markup())
     await message.answer("У вас приостановлены входящие. Чтобы восстановить — вернитесь в главное меню.", reply_markup=back_to_menu_keyboard())
+
+
+@router.callback_query(F.data == "menu:my_listings")
+async def my_listings_callback(callback: CallbackQuery, state: FSMContext, session):
+    if not callback.from_user:
+        await callback.answer()
+        return
+    await state.clear()
+    await state.set_state(MAIN_MENU_STATE)
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
+    if not user:
+        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    listings = await get_open_listings_by_user(session, user.id)
+    if not listings:
+        await callback.message.answer("У вас пока нет открытых заявок.", reply_markup=main_menu_keyboard())
+        await callback.answer()
+        return
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    for lst in listings:
+        caption = f"{user.first_name or 'Вы'} ({user.confirmed_deals} подтв. сделок)\nКод заявки «{lst.code}» (сравните с кодом на фото)\n{lst.description}"
+        builder = InlineKeyboardBuilder()
+        builder.row(
+            InlineKeyboardButton(text="Посмотреть отклики", callback_data=f"listings_resp:{lst.id}"),
+            InlineKeyboardButton(text="Закрыть заявку", callback_data=f"listings_close:{lst.id}"),
+        )
+        await callback.message.answer_photo(photo=lst.photo_file_id or "", caption=caption, reply_markup=builder.as_markup())
+    await callback.message.answer("У вас приостановлены входящие. Чтобы восстановить — вернитесь в главное меню.", reply_markup=back_to_menu_keyboard())
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("listings_close:"))

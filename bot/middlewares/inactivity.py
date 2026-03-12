@@ -2,9 +2,8 @@ import asyncio
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware
-from aiogram.types import Message, TelegramObject
+from aiogram.types import Message, CallbackQuery, TelegramObject
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.base import BaseEventIsolation
 
 from bot.config import load_config
 
@@ -27,10 +26,11 @@ class InactivityMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any],
     ) -> Any:
-        if not isinstance(event, Message):
-            return await handler(event, data)
-
-        user_id = event.from_user.id if event.from_user else None
+        user_id = None
+        if isinstance(event, Message):
+            user_id = event.from_user.id if event.from_user else None
+        elif isinstance(event, CallbackQuery):
+            user_id = event.from_user.id if event.from_user else None
         if user_id is None:
             return await handler(event, data)
 
@@ -38,20 +38,28 @@ class InactivityMiddleware(BaseMiddleware):
         if user_id in _user_timers:
             task = _user_timers.pop(user_id)
             task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
 
         state: FSMContext = data.get("state")
         if state is None:
             return await handler(event, data)
+        bot = data.get("bot")
 
         async def reset_to_menu():
             await asyncio.sleep(INACTIVITY_SECONDS)
             _user_timers.pop(user_id, None)
             await state.clear()
             await state.set_state(self.default_state)
+            if bot is not None:
+                try:
+                    from bot.keyboards.menu import main_menu_keyboard
+
+                    await bot.send_message(
+                        user_id,
+                        "Вы были неактивны 10 минут. Возвращаем в главное меню.",
+                        reply_markup=main_menu_keyboard(),
+                    )
+                except Exception:
+                    pass
 
         task = asyncio.create_task(reset_to_menu())
         _user_timers[user_id] = task

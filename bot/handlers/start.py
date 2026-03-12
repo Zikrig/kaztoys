@@ -76,57 +76,57 @@ async def cmd_start(
 
 
 def __accept_keyboard():
-    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=BTN_ACCEPT)]],
-        resize_keyboard=True,
-    )
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text=BTN_ACCEPT, callback_data="onboarding:accept"))
+    return builder.as_markup()
 
 
 def __ready_keyboard():
-    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BTN_START_SEARCH)],
-            [KeyboardButton(text=BTN_LIST_LISTING)],
-        ],
-        resize_keyboard=True,
-    )
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text=BTN_START_SEARCH, callback_data="onboarding:start_search"))
+    builder.row(InlineKeyboardButton(text=BTN_LIST_LISTING, callback_data="onboarding:new_listing"))
+    return builder.as_markup()
 
 
-@router.message(OnboardingStates.wait_accept)
-async def onboarding_accept_any(message: Message, state: FSMContext, session):
-    if message.text != BTN_ACCEPT:
-        await message.answer("Нажмите кнопку «Принять», чтобы продолжить.")
-        return
-    if message.from_user:
+@router.callback_query(OnboardingStates.wait_accept, F.data == "onboarding:accept")
+async def onboarding_accept_any(callback: CallbackQuery, state: FSMContext, session):
+    if callback.from_user:
         from bot.services.user import get_user_by_telegram_id
 
-        user = await get_user_by_telegram_id(session, message.from_user.id)
+        user = await get_user_by_telegram_id(session, callback.from_user.id)
         if user:
             await mark_onboarding_done(session, user.id)
     await state.set_state(OnboardingStates.wait_ready_choice)
     video_path = config.video_path_resolved()
     if video_path.exists():
         video = FSInputFile(video_path)
-        await message.answer_video(video=video)
+        await callback.message.answer_video(video=video)
     else:
-        await message.answer("(Видео-инструкция будет добавлена позже)")
-    await message.answer(READY_TO_START, reply_markup=__ready_keyboard())
+        await callback.message.answer("(Видео-инструкция будет добавлена позже)")
+    await callback.message.answer(READY_TO_START, reply_markup=__ready_keyboard())
+    await callback.answer()
 
 
-@router.message(OnboardingStates.wait_ready_choice, F.text == BTN_START_SEARCH)
-async def onboarding_start_search(message: Message, state: FSMContext, session, bot):
+@router.callback_query(OnboardingStates.wait_ready_choice, F.data == "onboarding:start_search")
+async def onboarding_start_search(callback: CallbackQuery, state: FSMContext, session, bot):
     from bot.handlers.search import start_search
-    await start_search(message, state, session, bot)
+    await start_search(callback.message, state, session, bot)
+    await callback.answer()
 
 
-@router.message(OnboardingStates.wait_ready_choice, F.text == BTN_LIST_LISTING)
-async def onboarding_list_listing(message: Message, state: FSMContext, session, bot):
+@router.callback_query(OnboardingStates.wait_ready_choice, F.data == "onboarding:new_listing")
+async def onboarding_list_listing(callback: CallbackQuery, state: FSMContext, session, bot):
     from bot.handlers.listing import start_listing_create
-    await start_listing_create(message, state, session)
+    await start_listing_create(callback.message, state, session)
+    await callback.answer()
 
 
 @router.message(OnboardingStates.wait_ready_choice)
 async def onboarding_ready_other(message: Message):
-    await message.answer("Выберите «Начать поиск» или «Выставить свою игрушку».")
+    await message.answer("Используйте inline-кнопки в предыдущем сообщении.")

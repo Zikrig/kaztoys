@@ -18,3 +18,14 @@ async def support(message: Message, state: FSMContext):
         f"Связаться с поддержкой: {contact}",
         reply_markup=main_menu_keyboard(),
     )
+
+
+@router.callback_query(F.data == "menu:support")
+async def support_callback(callback, state: FSMContext):
+    await state.clear()
+    contact = config.SUPPORT_CONTACT
+    await callback.message.answer(
+        f"Связаться с поддержкой: {contact}",
+        reply_markup=main_menu_keyboard(),
+    )
+    await callback.answer()
