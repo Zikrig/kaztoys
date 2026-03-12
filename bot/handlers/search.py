@@ -147,8 +147,26 @@ async def search_district_chosen(callback: CallbackQuery, state: FSMContext, ses
     slug = callback.data.split(":", 1)[1]
     await state.update_data(search_district=slug, search_offset=0, search_skip_count=0, search_hint_shown=False)
     data = await state.get_data()
-    user_id = data["search_user_id"]
-    await save_search_filters(session, user_id, data["search_category"], data["search_age"], slug)
+    user_id = data.get("search_user_id")
+    category = data.get("search_category")
+    age = data.get("search_age")
+    if not user_id or not category or not age:
+        # Stale callback or lost FSM state: restart search params flow gracefully.
+        if not callback.from_user:
+            await callback.answer()
+            return
+        user = await get_user_by_telegram_id(session, callback.from_user.id)
+        if not user:
+            await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
+            await callback.answer()
+            return
+        await state.clear()
+        await state.update_data(search_user_id=user.id, search_skip_count=0, search_hint_shown=False)
+        await state.set_state(SearchStates.wait_category)
+        await callback.message.answer("Параметры поиска обновились. Выберите категорию:", reply_markup=category_search_keyboard())
+        await callback.answer()
+        return
+    await save_search_filters(session, user_id, category, age, slug)
     await state.set_state(SearchStates.showing)
     await callback.answer()
     await _send_listing_at_offset(bot=callback.bot, chat_id=callback.message.chat.id, state=state, session=session)
