@@ -341,7 +341,7 @@ async def my_listings(message: Message, state: FSMContext, session):
         caption = f"{user.first_name or 'Вы'} ({user.confirmed_deals} подтв. сделок)\nКод заявки «{lst.code}» (сравните с кодом на фото)\n{lst.description}"
         builder = InlineKeyboardBuilder()
         builder.row(
-            InlineKeyboardButton(text="Посмотреть отклики", callback_data=f"listings_resp:{lst.id}"),
+            InlineKeyboardButton(text="Отклики", callback_data=f"listings_resp:{lst.id}"),
             InlineKeyboardButton(text="Закрыть заявку", callback_data=f"listings_close:{lst.id}"),
         )
         await message.answer_photo(photo=lst.photo_file_id or "", caption=caption, reply_markup=builder.as_markup())
@@ -371,7 +371,7 @@ async def my_listings_callback(callback: CallbackQuery, state: FSMContext, sessi
         caption = f"{user.first_name or 'Вы'} ({user.confirmed_deals} подтв. сделок)\nКод заявки «{lst.code}» (сравните с кодом на фото)\n{lst.description}"
         builder = InlineKeyboardBuilder()
         builder.row(
-            InlineKeyboardButton(text="Посмотреть отклики", callback_data=f"listings_resp:{lst.id}"),
+            InlineKeyboardButton(text="Отклики", callback_data=f"listings_resp:{lst.id}"),
             InlineKeyboardButton(text="Закрыть заявку", callback_data=f"listings_close:{lst.id}"),
         )
         await callback.message.answer_photo(photo=lst.photo_file_id or "", caption=caption, reply_markup=builder.as_markup())
