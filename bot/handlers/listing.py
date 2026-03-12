@@ -18,7 +18,14 @@ from bot.texts.errors import NOT_A_PHOTO, NOT_TEXT
 from bot.keyboards.common import back_to_menu_keyboard
 from bot.keyboards.menu import main_menu_keyboard
 from bot.keyboards.report import report_button_row
-from bot.keyboards.categories import category_keyboard, age_keyboard, CATEGORIES, AGES
+from bot.keyboards.categories import (
+    category_keyboard,
+    age_keyboard,
+    CATEGORIES,
+    AGES,
+    CATEGORY_BABIES,
+    AGE_0_2,
+)
 from bot.services.user import get_user_by_telegram_id
 from bot.services.listing import (
     generate_unique_code,
@@ -206,6 +213,13 @@ async def listing_photo_not_photo(message: Message, state: FSMContext):
 async def listing_category_chosen(callback: CallbackQuery, state: FSMContext):
     slug = callback.data.split(":", 1)[1]
     await state.update_data(listing_category=slug)
+    # If category is "для малышей", age is fixed to 0–2 years and we skip asking
+    if slug == CATEGORY_BABIES:
+        await state.update_data(listing_age=AGE_0_2)
+        await state.set_state(ListingCreateStates.wait_description)
+        await callback.message.edit_text(DESCRIPTION_PROMPT)
+        await callback.answer()
+        return
     await state.set_state(ListingCreateStates.wait_age)
     await callback.message.edit_text(CHOOSE_AGE)
     await callback.message.answer("Выберите возраст:", reply_markup=age_keyboard(prefix="listing_age"))
