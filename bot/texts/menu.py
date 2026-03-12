@@ -9,6 +9,7 @@ BTN_MY_RESPONSES = "Мои отклики"
 BTN_OPEN_UNCONFIRMED = "Открыть неподтверждённые сделки"
 BTN_MY_SUBSCRIPTION = "Моя подписка"
 BTN_SUPPORT = "Связаться с поддержкой"
+BTN_REFERRAL = "Пригласить друзей"
 
 BTN_BACK_TO_MENU = "В главное меню"
 BTN_CANCEL = "Отмена"

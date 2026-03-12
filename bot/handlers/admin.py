@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.config import load_config
 from bot.models.user import User
 from bot.services.listing import get_listing_by_id
+from bot.services.user import get_users_acquisition_counts
 from bot.services.report import (
     REPORT_REASON_CONTENT,
     REPORT_REASON_HIDE,
@@ -40,6 +41,7 @@ def _admin_menu_markup():
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="Жалобы", callback_data="adm:reports"))
     builder.row(InlineKeyboardButton(text="Черный список", callback_data="adm:black:0"))
+    builder.row(InlineKeyboardButton(text="Трафик", callback_data="adm:traffic"))
     return builder.as_markup()
 
 
@@ -264,3 +266,25 @@ async def admin_unblock(callback: CallbackQuery, session):
         return
     await _render_blacklist(callback.message, session, page=int(page_raw))
     await callback.answer("Пользователь реабилитирован.")
+
+
+@router.callback_query(F.data == "adm:traffic")
+async def admin_traffic(callback: CallbackQuery, session):
+    if not callback.from_user or not _is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    counts = await get_users_acquisition_counts(session)
+    total = counts["referral"] + counts["instagram"] + counts["other"]
+    text = (
+        "Источники пользователей\n\n"
+        f"Всего пользователей: {total}\n"
+        f"По рефералкам: {counts['referral']}\n"
+        f"По спецссылке Instagram: {counts['instagram']}\n"
+        f"Другим путем: {counts['other']}"
+    )
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="Назад", callback_data="adm:menu"))
+    await callback.message.edit_text(text, reply_markup=builder.as_markup())
+    await callback.answer()

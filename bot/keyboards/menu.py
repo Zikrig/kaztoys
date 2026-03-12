@@ -9,6 +9,7 @@ from bot.texts.menu import (
     BTN_OPEN_UNCONFIRMED,
     BTN_MY_SUBSCRIPTION,
     BTN_SUPPORT,
+    BTN_REFERRAL,
 )
 
 
@@ -25,4 +26,5 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text=BTN_MY_SUBSCRIPTION, callback_data="menu:subscription"),
         InlineKeyboardButton(text=BTN_SUPPORT, callback_data="menu:support"),
     )
+    builder.row(InlineKeyboardButton(text=BTN_REFERRAL, callback_data="menu:referral"))
     return builder.as_markup()

@@ -19,6 +19,7 @@ class User(Base):
     blocked_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
     blocked_by_admin_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acquisition_source: Mapped[str] = mapped_column(String(32), default="other", nullable=False)
     referral_from_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

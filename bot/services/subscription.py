@@ -34,3 +34,17 @@ async def create_subscription(session: AsyncSession, user_id: int, days: int = 1
     await session.commit()
     await session.refresh(sub)
     return sub
+
+
+async def add_subscription_days(session: AsyncSession, user_id: int, days: int) -> Subscription:
+    """Extend active subscription or create a new one."""
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    active = await get_active_subscription(session, user_id)
+    if active:
+        active.expires_at = active.expires_at + timedelta(days=days)
+        await session.commit()
+        await session.refresh(active)
+        return active
+    return await create_subscription(session, user_id=user_id, days=days)

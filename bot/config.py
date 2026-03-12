@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "kaztoys"
 
     REFERRAL_PARAM: str = "ref"
+    INSTAGRAM_PARAM: str = "insta"
+    REFERRAL_BONUS_DAYS: int = 7
     SUPPORT_CONTACT: str = "@support"
     VIDEO_INSTRUCTION_PATH: str = "assets/video_instruction.mp4"
     INACTIVITY_MINUTES: int = 10

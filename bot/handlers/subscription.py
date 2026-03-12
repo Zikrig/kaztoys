@@ -3,13 +3,16 @@ from datetime import datetime, timezone
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery
 
-from bot.texts.menu import BTN_MY_SUBSCRIPTION
+from bot.texts.menu import BTN_MY_SUBSCRIPTION, BTN_REFERRAL
 from bot.keyboards.menu import main_menu_keyboard
-from bot.services.user import get_user_by_telegram_id
+from bot.services.user import get_user_by_telegram_id, get_referrals_count_by_user
 from bot.services.subscription import get_active_subscription
+from bot.config import load_config
 
 router = Router(name="subscription")
+config = load_config()
 
 
 @router.message(F.text == BTN_MY_SUBSCRIPTION)
@@ -84,3 +87,48 @@ async def sub_connect(callback, session):
     await create_subscription(session, user.id, days=14)
     await callback.answer("Подписка на 2 недели подключена.")
     await callback.message.answer("Подписка подключена. Осталось 14 дней.", reply_markup=main_menu_keyboard())
+
+
+def _build_referral_link(bot_username: str, user_id: int) -> str:
+    return f"https://t.me/{bot_username}?start={config.REFERRAL_PARAM}_{user_id}"
+
+
+async def _send_referral_info(target_message, session, telegram_user_id: int, bot) -> None:
+    user = await get_user_by_telegram_id(session, telegram_user_id)
+    if not user:
+        await target_message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
+        return
+    referrals_count = await get_referrals_count_by_user(session, user.id)
+    me = await bot.get_me()
+    if me.username:
+        referral_link = _build_referral_link(me.username, user.id)
+        link_line = f"Ваша ссылка: {referral_link}"
+    else:
+        link_line = "У бота нет username, реферальная ссылка недоступна."
+    await target_message.answer(
+        (
+            "Реферальная программа\n\n"
+            f"{link_line}\n"
+            f"Приглашено пользователей: {referrals_count}\n"
+            f"Бонус за каждого: +{config.REFERRAL_BONUS_DAYS} дн. подписки"
+        ),
+        reply_markup=main_menu_keyboard(),
+    )
+
+
+@router.message(F.text == BTN_REFERRAL)
+async def referral_info_message(message: Message, state: FSMContext, session, bot):
+    await state.clear()
+    if not message.from_user:
+        return
+    await _send_referral_info(message, session, message.from_user.id, bot)
+
+
+@router.callback_query(F.data == "menu:referral")
+async def referral_info_callback(callback: CallbackQuery, state: FSMContext, session, bot):
+    await state.clear()
+    if not callback.from_user:
+        await callback.answer()
+        return
+    await _send_referral_info(callback.message, session, callback.from_user.id, bot)
+    await callback.answer()

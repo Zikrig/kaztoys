@@ -11,6 +11,8 @@ from bot.texts.onboarding import DISCLAIMER, READY_TO_START, BTN_START_SEARCH, B
 from bot.texts.menu import MAIN_MENU_GREETING
 from bot.keyboards.menu import main_menu_keyboard
 from bot.services.user import get_or_create_user, mark_onboarding_done
+from bot.services.subscription import add_subscription_days
+from bot.models.user import User
 from bot.middlewares.inactivity import MAIN_MENU_STATE
 
 router = Router(name="start")
@@ -36,6 +38,7 @@ async def cmd_start(
     first_name = from_user.first_name
 
     referral_from_id = None
+    acquisition_source = "other"
     payload = message.text
     if isinstance(payload, str) and config.REFERRAL_PARAM:
         # /start ref_123 or /start 123 (deep link)
@@ -46,18 +49,33 @@ async def cmd_start(
                 try:
                     ref_id = int(ref_part.split("_", 1)[1])
                     referral_from_id = ref_id
+                    acquisition_source = "referral"
                 except (ValueError, IndexError):
                     pass
             elif ref_part.isdigit():
                 referral_from_id = int(ref_part)
+                acquisition_source = "referral"
+            elif ref_part == config.INSTAGRAM_PARAM or ref_part.startswith(f"{config.INSTAGRAM_PARAM}_"):
+                acquisition_source = "instagram"
+    if referral_from_id is not None:
+        referrer = await session.get(User, referral_from_id)
+        if not referrer:
+            referral_from_id = None
+            if acquisition_source == "referral":
+                acquisition_source = "other"
 
-    user = await get_or_create_user(
+    user, created = await get_or_create_user(
         session,
         telegram_id=telegram_id,
         username=username,
         first_name=first_name,
         referral_from_id=referral_from_id,
+        acquisition_source=acquisition_source,
     )
+    if created and user.referral_from_id and user.referral_from_id != user.id:
+        referrer = await session.get(User, user.referral_from_id)
+        if referrer:
+            await add_subscription_days(session, referrer.id, config.REFERRAL_BONUS_DAYS)
 
     await state.clear()
     await state.set_state(MAIN_MENU_STATE)
