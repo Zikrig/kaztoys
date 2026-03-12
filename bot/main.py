@@ -29,6 +29,7 @@ from bot.handlers import (
     support_router,
     report_router,
     admin_router,
+    fallback_router,
 )
 from bot.middlewares.db import DbSessionMiddleware
 from bot.middlewares.bot import BotInjectMiddleware
@@ -102,6 +103,7 @@ async def main():
     dp.include_router(report_router)
     dp.include_router(admin_router)
     dp.include_router(menu_router)
+    dp.include_router(fallback_router)
 
     from bot.tasks.reminder_24h import run_reminder_cycle
 

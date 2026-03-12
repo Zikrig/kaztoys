@@ -8,6 +8,7 @@ from .subscription import router as subscription_router
 from .support import router as support_router
 from .report import router as report_router
 from .admin import router as admin_router
+from .fallback import router as fallback_router
 
 __all__ = [
     "start_router",
@@ -20,4 +21,5 @@ __all__ = [
     "support_router",
     "report_router",
     "admin_router",
+    "fallback_router",
 ]

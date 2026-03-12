@@ -1,6 +1,5 @@
 from aiogram import F, Router, Bot
-from aiogram.types import CallbackQuery, Message
-from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery
 
 from bot.config import load_config
 from bot.keyboards.report import report_reason_keyboard
@@ -16,7 +15,6 @@ from bot.services.report import (
 )
 from bot.services.user import get_user_by_telegram_id
 from bot.models.user import User
-from bot.middlewares.inactivity import MAIN_MENU_STATE
 
 router = Router(name="report")
 config = load_config()
@@ -119,13 +117,3 @@ async def report_reason_chosen(callback: CallbackQuery, session, bot: Bot):
     await callback.answer("Жалоба отправлена.")
 
 
-@router.message()
-async def catch_all_menu(message: Message, state: FSMContext):
-    """
-    Всегда срабатывающий роутер: возвращает пользователя в главное меню,
-    если сообщение не обработано раньше.
-    """
-    from bot.keyboards.menu import main_menu_keyboard
-    await state.clear()
-    await state.set_state(MAIN_MENU_STATE)
-    await message.answer("Возвращаю вас в главное меню.", reply_markup=main_menu_keyboard())
