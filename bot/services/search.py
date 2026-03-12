@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models.listing import Listing
@@ -49,7 +49,15 @@ async def get_listing_page(
     if age_group and age_group != "any":
         q = q.where(Listing.age_group == age_group)
     if district and district != "any":
-        q = q.where(Listing.district == district)
+        # If user selected a specific district, show listings either for that
+        # district or with "any"/no district (видны всем).
+        q = q.where(
+            or_(
+                Listing.district == district,
+                Listing.district.is_(None),
+                Listing.district == "any",
+            )
+        )
     q = q.offset(offset).limit(limit)
     result = await session.execute(q)
     return result.scalars().all()
