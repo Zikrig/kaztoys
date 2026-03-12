@@ -275,12 +275,19 @@ async def admin_traffic(callback: CallbackQuery, session):
         return
     counts = await get_users_acquisition_counts(session)
     total = counts["referral"] + counts["instagram"] + counts["other"]
+    me = await callback.bot.get_me()
+    insta_link = (
+        f"https://t.me/{me.username}?start={config.INSTAGRAM_PARAM}"
+        if me.username
+        else "(у бота нет username)"
+    )
     text = (
         "Источники пользователей\n\n"
         f"Всего пользователей: {total}\n"
         f"По рефералкам: {counts['referral']}\n"
         f"По спецссылке Instagram: {counts['instagram']}\n"
-        f"Другим путем: {counts['other']}"
+        f"Другим путем: {counts['other']}\n\n"
+        f"Спецссылка Instagram:\n{insta_link}"
     )
     from aiogram.types import InlineKeyboardButton
     from aiogram.utils.keyboard import InlineKeyboardBuilder
