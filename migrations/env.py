@@ -15,6 +15,8 @@ from bot.models.response import Response
 from bot.models.match import Match
 from bot.models.subscription import Subscription
 from bot.models.search_filters import SearchFilters
+from bot.models.report import Report
+from bot.models.hidden_author import HiddenAuthor
 
 config = context.config
 if config.config_file_name is not None:

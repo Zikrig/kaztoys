@@ -27,9 +27,12 @@ from bot.handlers import (
     matches_router,
     subscription_router,
     support_router,
+    report_router,
+    admin_router,
 )
 from bot.middlewares.db import DbSessionMiddleware
 from bot.middlewares.bot import BotInjectMiddleware
+from bot.middlewares.access import BlockedUserMiddleware
 from bot.middlewares.inactivity import InactivityMiddleware
 from bot.middlewares.throttling import ThrottlingMiddleware
 
@@ -82,6 +85,8 @@ async def main():
     dp.callback_query.middleware(DbSessionMiddleware())
     dp.message.middleware(BotInjectMiddleware(bot))
     dp.callback_query.middleware(BotInjectMiddleware(bot))
+    dp.message.middleware(BlockedUserMiddleware())
+    dp.callback_query.middleware(BlockedUserMiddleware())
     dp.message.middleware(InactivityMiddleware())
     dp.callback_query.middleware(InactivityMiddleware())
     dp.message.middleware(ThrottlingMiddleware())
@@ -94,6 +99,8 @@ async def main():
     dp.include_router(matches_router)
     dp.include_router(subscription_router)
     dp.include_router(support_router)
+    dp.include_router(report_router)
+    dp.include_router(admin_router)
     dp.include_router(menu_router)
 
     from bot.tasks.reminder_24h import run_reminder_cycle

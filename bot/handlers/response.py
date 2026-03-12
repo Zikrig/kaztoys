@@ -6,6 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from bot.texts.menu import BTN_BACK_TO_MENU, BTN_MY_RESPONSES
 from bot.keyboards.menu import main_menu_keyboard
 from bot.keyboards.common import back_to_menu_keyboard
+from bot.keyboards.report import report_button_row
 from bot.texts.listing import BTN_CONFIRM_SEND, BTN_EDIT
 from bot.services.user import get_user_by_telegram_id
 from bot.services.listing import get_open_listings_by_user, get_listing_by_id
@@ -43,6 +44,7 @@ async def my_responses(message: Message, state: FSMContext, session):
         await message.answer("У вас пока нет откликов.", reply_markup=main_menu_keyboard())
         return
     from bot.models.user import User as UserModel
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
     for resp in responses:
         listing = await get_listing_by_id(session, resp.listing_id)
         if not listing:
@@ -58,7 +60,9 @@ async def my_responses(message: Message, state: FSMContext, session):
             f"Статус: {status}"
         )
         try:
-            await message.answer_photo(photo=listing.photo_file_id or "", caption=caption)
+            builder = InlineKeyboardBuilder()
+            builder.row(*report_button_row(listing_id=listing.id))
+            await message.answer_photo(photo=listing.photo_file_id or "", caption=caption, reply_markup=builder.as_markup())
             await message.answer_photo(photo=resp.photo_file_id or "")
         except Exception:
             await message.answer(caption)
@@ -82,6 +86,7 @@ async def my_responses_callback(callback: CallbackQuery, state: FSMContext, sess
         await callback.answer()
         return
     from bot.models.user import User as UserModel
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
     for resp in responses:
         listing = await get_listing_by_id(session, resp.listing_id)
         if not listing:
@@ -97,7 +102,13 @@ async def my_responses_callback(callback: CallbackQuery, state: FSMContext, sess
             f"Статус: {status}"
         )
         try:
-            await callback.message.answer_photo(photo=listing.photo_file_id or "", caption=caption)
+            builder = InlineKeyboardBuilder()
+            builder.row(*report_button_row(listing_id=listing.id))
+            await callback.message.answer_photo(
+                photo=listing.photo_file_id or "",
+                caption=caption,
+                reply_markup=builder.as_markup(),
+            )
             await callback.message.answer_photo(photo=resp.photo_file_id or "")
         except Exception:
             await callback.message.answer(caption)
@@ -113,15 +124,24 @@ async def response_offer_ignore(message: Message):
 @router.callback_query(F.data.startswith("search_offer:"))
 async def response_after_search_offer(callback: CallbackQuery, state: FSMContext, session):
     listing_id = int(callback.data.split(":", 1)[1])
-    await state.update_data(target_listing_id=listing_id)
-    await state.set_state(ResponseStates.choose_listing)
-    await callback.answer()
     if not callback.from_user:
+        await callback.answer()
         return
     user = await get_user_by_telegram_id(session, callback.from_user.id)
     if not user:
         await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
+        await callback.answer()
         return
+    target_listing = await get_listing_by_id(session, listing_id)
+    if not target_listing:
+        await callback.answer("Заявка не найдена.")
+        return
+    if target_listing.user_id == user.id:
+        await callback.answer("Нельзя откликнуться на собственную заявку.")
+        return
+    await state.update_data(target_listing_id=listing_id)
+    await state.set_state(ResponseStates.choose_listing)
+    await callback.answer()
     listings = await get_open_listings_by_user(session, user.id)
     if not listings:
         await callback.message.answer(
@@ -195,7 +215,7 @@ async def response_use_listing(callback: CallbackQuery, state: FSMContext, sessi
     await callback.message.answer_photo(
         photo=my_listing.photo_file_id or "",
         caption=preview,
-        reply_markup=confirm_kb,
+        reply_markup=builder.as_markup(),
     )
 
 

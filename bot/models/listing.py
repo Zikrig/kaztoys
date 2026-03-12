@@ -23,3 +23,4 @@ class Listing(Base):
     user = relationship("User", back_populates="listings", foreign_keys=[user_id])
     responses = relationship("Response", back_populates="listing", foreign_keys="Response.listing_id")
     matches = relationship("Match", back_populates="listing", foreign_keys="Match.listing_id")
+    reports = relationship("Report", back_populates="listing", foreign_keys="Report.listing_id")

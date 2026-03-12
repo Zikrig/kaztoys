@@ -47,6 +47,9 @@ class InactivityMiddleware(BaseMiddleware):
         async def reset_to_menu():
             await asyncio.sleep(INACTIVITY_SECONDS)
             _user_timers.pop(user_id, None)
+            current_state = await state.get_state()
+            if current_state == self.default_state:
+                return
             await state.clear()
             await state.set_state(self.default_state)
             if bot is not None:
@@ -55,7 +58,7 @@ class InactivityMiddleware(BaseMiddleware):
 
                     await bot.send_message(
                         user_id,
-                        "Вы были неактивны 10 минут. Возвращаем в главное меню.",
+                        "Желаем удачного обмена. С чего начнем?",
                         reply_markup=main_menu_keyboard(),
                     )
                 except Exception:

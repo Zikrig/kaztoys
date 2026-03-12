@@ -5,6 +5,7 @@ import logging
 from aiogram import Bot
 
 from bot.models.base import get_async_session_maker
+from bot.keyboards.report import report_button_row
 from bot.services.match import get_matches_for_reminder, mark_reminder_sent
 from bot.services.listing import get_listing_by_id
 from bot.services.response import get_response_by_id
@@ -48,6 +49,8 @@ async def run_reminder_cycle(bot: Bot) -> None:
                     InlineKeyboardButton(text="Подтвердить сделку", callback_data=f"match_confirm:{match.id}"),
                     InlineKeyboardButton(text="Сделка не состоялась", callback_data=f"match_cancel:{match.id}"),
                 )
+                report_builder = InlineKeyboardBuilder()
+                report_builder.row(*report_button_row(listing_id=listing.id))
                 text_owner = REMINDER_TEXT.format(
                     listing_code=listing.code,
                     listing_desc=listing.description,
@@ -62,10 +65,20 @@ async def run_reminder_cycle(bot: Bot) -> None:
                     response_desc=resp.description,
                     contact=contact_owner,
                 )
-                await bot.send_photo(owner.telegram_id, photo=listing.photo_file_id or "", caption=text_owner)
+                await bot.send_photo(
+                    owner.telegram_id,
+                    photo=listing.photo_file_id or "",
+                    caption=text_owner,
+                    reply_markup=report_builder.as_markup(),
+                )
                 await bot.send_photo(owner.telegram_id, photo=resp.photo_file_id or "")
                 await bot.send_message(owner.telegram_id, "Подтвердите сделку или отмените:", reply_markup=builder.as_markup())
-                await bot.send_photo(respondent.telegram_id, photo=listing.photo_file_id or "", caption=text_resp)
+                await bot.send_photo(
+                    respondent.telegram_id,
+                    photo=listing.photo_file_id or "",
+                    caption=text_resp,
+                    reply_markup=report_builder.as_markup(),
+                )
                 await bot.send_photo(respondent.telegram_id, photo=resp.photo_file_id or "")
                 await bot.send_message(respondent.telegram_id, "Подтвердите сделку или отмените:", reply_markup=builder.as_markup())
                 await mark_reminder_sent(session, match.id)

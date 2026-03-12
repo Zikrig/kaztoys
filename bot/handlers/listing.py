@@ -17,6 +17,7 @@ from bot.texts.listing import (
 from bot.texts.errors import NOT_A_PHOTO, NOT_TEXT
 from bot.keyboards.common import back_to_menu_keyboard
 from bot.keyboards.menu import main_menu_keyboard
+from bot.keyboards.report import report_button_row
 from bot.keyboards.categories import category_keyboard, age_keyboard, CATEGORIES, AGES
 from bot.services.user import get_user_by_telegram_id
 from bot.services.listing import (
@@ -27,6 +28,7 @@ from bot.services.listing import (
     close_listing,
 )
 from bot.services.subscription import has_active_subscription, create_subscription
+from bot.services.report import can_view_listing
 from bot.middlewares.inactivity import MAIN_MENU_STATE
 
 
@@ -37,12 +39,13 @@ async def _broadcast_new_listing(session, bot, listing, author_user_id: int):
     from bot.models.subscription import Subscription
     from datetime import datetime, timezone
     result = await session.execute(
-        select(User.telegram_id).join(Subscription, User.id == Subscription.user_id).where(
+        select(User.id, User.telegram_id).join(Subscription, User.id == Subscription.user_id).where(
             Subscription.expires_at > datetime.now(timezone.utc),
             User.id != author_user_id,
+            User.is_blocked.is_(False),
         ).distinct()
     )
-    telegram_ids = [r[0] for r in result.fetchall()]
+    recipients = result.all()
     from bot.models.user import User as U
     author = await session.get(U, author_user_id)
     name = author.first_name or "Пользователь" if author else "Пользователь"
@@ -55,7 +58,10 @@ async def _broadcast_new_listing(session, bot, listing, author_user_id: int):
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="Отправить предложение", callback_data=f"search_offer:{listing.id}"))
-    for tid in telegram_ids:
+    builder.row(*report_button_row(listing_id=listing.id))
+    for recipient_user_id, tid in recipients:
+        if not await can_view_listing(session, viewer_user_id=recipient_user_id, author_user_id=author_user_id):
+            continue
         try:
             await bot.send_photo(tid, photo=listing.photo_file_id or "", caption=caption, reply_markup=builder.as_markup())
         except Exception:

@@ -5,6 +5,8 @@ from .response import Response
 from .match import Match
 from .subscription import Subscription
 from .search_filters import SearchFilters
+from .report import Report
+from .hidden_author import HiddenAuthor
 
 __all__ = [
     "Base",
@@ -16,4 +18,6 @@ __all__ = [
     "Match",
     "Subscription",
     "SearchFilters",
+    "Report",
+    "HiddenAuthor",
 ]

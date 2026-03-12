@@ -16,6 +16,7 @@ from bot.texts.search import (
 )
 from bot.keyboards.menu import main_menu_keyboard
 from bot.keyboards.common import back_to_menu_keyboard
+from bot.keyboards.report import report_button_row
 from bot.keyboards.categories import category_search_keyboard, age_search_keyboard, CATEGORIES, AGES
 from bot.keyboards.districts import district_search_keyboard
 from bot.services.user import get_user_by_telegram_id
@@ -176,6 +177,12 @@ async def _send_listing_at_offset(*, bot: Bot, chat_id: int, state: FSMContext, 
     if not row:
         return
     lst, owner = row
+    if owner.id == user_id:
+        # Safety net: never show the user's own listing in search,
+        # even if the repository filter is bypassed somehow.
+        await state.update_data(search_offset=offset + 1)
+        await _send_listing_at_offset(bot=bot, chat_id=chat_id, state=state, session=session)
+        return
     caption = (
         f"{owner.first_name or 'Пользователь'} ({owner.confirmed_deals} подтв. сделок)\n"
         f"Код заявки «{lst.code}» (сравните с кодом на фото)\n"
@@ -189,6 +196,7 @@ async def _send_listing_at_offset(*, bot: Bot, chat_id: int, state: FSMContext, 
         InlineKeyboardButton(text=BTN_OFFER_EXCHANGE, callback_data=f"search_offer:{lst.id}"),
         InlineKeyboardButton(text=BTN_NEXT, callback_data="search_next"),
     )
+    builder.row(*report_button_row(listing_id=lst.id))
     builder.row(InlineKeyboardButton(text=BTN_BACK_TO_MENU, callback_data="search_back_menu"))
     builder.row(InlineKeyboardButton(text=BTN_CHANGE_PARAMS, callback_data="search_change_params"))
     await bot.send_photo(

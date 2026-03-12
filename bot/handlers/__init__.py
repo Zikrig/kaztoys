@@ -6,6 +6,8 @@ from .response import router as response_router
 from .matches import router as matches_router
 from .subscription import router as subscription_router
 from .support import router as support_router
+from .report import router as report_router
+from .admin import router as admin_router
 
 __all__ = [
     "start_router",
@@ -16,4 +18,6 @@ __all__ = [
     "matches_router",
     "subscription_router",
     "support_router",
+    "report_router",
+    "admin_router",
 ]

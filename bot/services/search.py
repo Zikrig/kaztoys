@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.models.listing import Listing
 from bot.models.user import User
 from bot.models.search_filters import SearchFilters
+from bot.services.report import apply_listing_visibility_filters
 
 
 async def save_search_filters(
@@ -40,6 +41,7 @@ async def get_listing_page(
     exclude_user_id: int | None = None,
 ):
     q = select(Listing).where(Listing.status == "open").order_by(Listing.created_at.desc())
+    q = await apply_listing_visibility_filters(q, exclude_user_id)
     if exclude_user_id is not None:
         q = q.where(Listing.user_id != exclude_user_id)
     if category and category != "all":
