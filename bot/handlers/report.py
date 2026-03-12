@@ -115,3 +115,14 @@ async def report_reason_chosen(callback: CallbackQuery, session, bot: Bot):
         text = "Жалоба отправлена."
     await callback.message.answer(text)
     await callback.answer("Жалоба отправлена.")
+
+
+@router.message()
+async def catch_all_menu(message):
+    """
+    Всегда срабатывающий роутер: возвращает пользователя в главное меню,
+    если сообщение не обработано раньше.
+    """
+    from bot.keyboards.menu import main_menu_keyboard
+    await state.clear()
+    await message.answer("Возвращаю вас в главное меню.", reply_markup=main_menu_keyboard())
