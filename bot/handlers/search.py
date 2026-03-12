@@ -253,8 +253,11 @@ async def search_continue_after_hint(callback: CallbackQuery, state: FSMContext,
 @router.callback_query(F.data == "search_change_params")
 async def search_change_params(callback: CallbackQuery, state: FSMContext):
     await state.set_state(SearchStates.wait_category)
-    await callback.message.edit_text(SEARCH_WHAT)
-    await callback.message.answer("Выберите категорию:", reply_markup=category_search_keyboard())
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.message.answer(SEARCH_WHAT, reply_markup=category_search_keyboard())
     await callback.answer()
 
 
@@ -263,7 +266,10 @@ async def search_back_menu(callback: CallbackQuery, state: FSMContext):
     from bot.keyboards.menu import main_menu_keyboard
     await state.clear()
     await state.set_state(MAIN_MENU_STATE)
-    await callback.message.edit_text("Главное меню.")
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
     await callback.message.answer("Выберите действие:", reply_markup=main_menu_keyboard())
     await callback.answer()
 

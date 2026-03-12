@@ -59,7 +59,15 @@ async def get_listing_page(
     if category and category != "all":
         q = q.where(Listing.category == category)
     if age_group and age_group != "any":
-        q = q.where(Listing.age_group == age_group)
+        # If user selected a specific age, also include listings with "any" age
+        # so listings marked "Любой возраст" are visible to everyone.
+        q = q.where(
+            or_(
+                Listing.age_group == age_group,
+                Listing.age_group == "any",
+                Listing.age_group.is_(None),
+            )
+        )
     if district and district != "any":
         # If user selected a specific district, show listings either for that
         # district or with "any"/no district (видны всем).
