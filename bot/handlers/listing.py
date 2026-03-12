@@ -99,7 +99,9 @@ async def start_listing_create(message: Message, state: FSMContext, session):
         return
     user = await get_user_by_telegram_id(session, message.from_user.id)
     if not user:
-        await message.answer("Сначала нажмите /start.", reply_markup=main_menu_keyboard())
+        await state.clear()
+        await state.set_state(MAIN_MENU_STATE)
+        await message.answer("Главное меню.", reply_markup=main_menu_keyboard())
         return
     active = await has_active_subscription(session, user.id)
     if not active:
@@ -127,7 +129,9 @@ async def start_listing_create_callback(callback: CallbackQuery, state: FSMConte
         return
     user = await get_user_by_telegram_id(session, callback.from_user.id)
     if not user:
-        await callback.message.answer("Сначала нажмите /start.", reply_markup=main_menu_keyboard())
+        await state.clear()
+        await state.set_state(MAIN_MENU_STATE)
+        await callback.message.answer("Главное меню.", reply_markup=main_menu_keyboard())
         await callback.answer()
         return
     active = await has_active_subscription(session, user.id)
