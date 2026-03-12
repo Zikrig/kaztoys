@@ -3,9 +3,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from bot.texts.menu import BTN_BACK_TO_MENU, BTN_MY_RESPONSES
+from bot.texts.menu import BTN_BACK_TO_MENU, BTN_CANCEL, BTN_MY_RESPONSES
 from bot.keyboards.menu import main_menu_keyboard
-from bot.keyboards.common import back_to_menu_keyboard
+from bot.keyboards.common import back_to_menu_keyboard, cancel_keyboard
 from bot.keyboards.report import report_button_row
 from bot.texts.listing import BTN_CONFIRM_SEND, BTN_EDIT
 from bot.services.user import get_user_by_telegram_id
@@ -16,6 +16,7 @@ from bot.services.response import (
     get_responses_by_listing,
     get_responses_by_user,
 )
+from bot.services.subscription import has_active_subscription, create_subscription
 from bot.models.listing import Listing
 from bot.models.user import User
 from bot.middlewares.inactivity import MAIN_MENU_STATE
@@ -28,6 +29,46 @@ class ResponseStates(StatesGroup):
     wait_photo = State()
     wait_description = State()
     confirm = State()
+
+
+async def _show_response_source_picker(callback: CallbackQuery, session, user_id: int):
+    listings = await get_open_listings_by_user(session, user_id)
+    if not listings:
+        from aiogram.types import InlineKeyboardButton
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="Создать новый отклик", callback_data="resp_create_new"))
+        await callback.message.answer(
+            "У вас нет открытых заявок. Можно создать новый отклик вручную.",
+            reply_markup=builder.as_markup(),
+        )
+        return
+
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+    builder = InlineKeyboardBuilder()
+    for lst in listings:
+        builder.row(InlineKeyboardButton(text=f"Отправить эту: {lst.code}", callback_data=f"resp_use:{lst.id}"))
+    builder.row(InlineKeyboardButton(text="Создать новый отклик", callback_data="resp_create_new"))
+    await callback.message.answer(
+        "Выберите имеющуюся заявку или создайте новый отклик для этой заявки:",
+        reply_markup=builder.as_markup(),
+    )
+
+
+async def _prompt_response_subscription(callback: CallbackQuery):
+    from aiogram.types import InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="Купить доступ на 2 недели", callback_data="response_buy_sub"))
+    builder.row(InlineKeyboardButton(text="В главное меню", callback_data="menu:main"))
+    await callback.message.answer(
+        "Для обмена нужна активная подписка. Подключить доступ на 2 недели?",
+        reply_markup=builder.as_markup(),
+    )
 
 
 @router.message(F.text == BTN_MY_RESPONSES)
@@ -132,6 +173,12 @@ async def response_after_search_offer(callback: CallbackQuery, state: FSMContext
         await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
         await callback.answer()
         return
+    active = await has_active_subscription(session, user.id)
+    await state.update_data(target_listing_id=listing_id)
+    if not active:
+        await callback.answer()
+        await _prompt_response_subscription(callback)
+        return
     target_listing = await get_listing_by_id(session, listing_id)
     if not target_listing:
         await callback.answer("Заявка не найдена.")
@@ -139,30 +186,24 @@ async def response_after_search_offer(callback: CallbackQuery, state: FSMContext
     if target_listing.user_id == user.id:
         await callback.answer("Нельзя откликнуться на собственную заявку.")
         return
-    await state.update_data(target_listing_id=listing_id)
     await state.set_state(ResponseStates.choose_listing)
     await callback.answer()
-    listings = await get_open_listings_by_user(session, user.id)
-    if not listings:
-        await callback.message.answer(
-            "У вас нет открытых заявок. Создайте заявку в «Выставить свою игрушку» или выберите «Создать новую» для отклика.",
-        )
-        from aiogram.types import InlineKeyboardButton
-        from aiogram.utils.keyboard import InlineKeyboardBuilder
-        builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(text="Создать новую", callback_data="resp_create_new"))
-        await callback.message.answer("Создать новую заявку для отклика?", reply_markup=builder.as_markup())
+    await _show_response_source_picker(callback, session, user.id)
+
+
+@router.callback_query(F.data == "response_buy_sub")
+async def response_buy_sub(callback: CallbackQuery, state: FSMContext, session):
+    if not callback.from_user:
+        await callback.answer()
         return
-    from aiogram.types import InlineKeyboardButton
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    for lst in listings:
-        builder.row(InlineKeyboardButton(text=f"Отправить эту: {lst.code}", callback_data=f"resp_use:{lst.id}"))
-    builder.row(InlineKeyboardButton(text="Создать новую", callback_data="resp_create_new"))
-    await callback.message.answer(
-        "Выберите имеющуюся заявку или создайте новую для отклика:",
-        reply_markup=builder.as_markup(),
-    )
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
+    if not user:
+        await callback.answer("Сначала нажмите /start.")
+        return
+    await create_subscription(session, user.id, days=14)
+    await state.set_state(ResponseStates.choose_listing)
+    await callback.answer("Подписка подключена.")
+    await _show_response_source_picker(callback, session, user.id)
 
 
 @router.callback_query(F.data.startswith("resp_use:"))
@@ -261,12 +302,24 @@ async def _notify_listing_owner_about_response(session, bot: Bot, listing, respo
 
 @router.callback_query(F.data == "resp_create_new")
 async def response_create_new(callback: CallbackQuery, state: FSMContext, session):
+    if not callback.from_user:
+        await callback.answer()
+        return
+    user = await get_user_by_telegram_id(session, callback.from_user.id)
+    if not user:
+        await callback.answer("Сначала нажмите /start.")
+        return
+    active = await has_active_subscription(session, user.id)
+    if not active:
+        await callback.answer()
+        await _prompt_response_subscription(callback)
+        return
     code = await generate_unique_response_code(session)
     await state.update_data(response_code=code, response_source="new")
     await state.set_state(ResponseStates.wait_photo)
     await callback.message.answer(
         f"Код отклика: {code}. Сделайте фото игрушки с бумажкой с этим кодом и отправьте фото.",
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=cancel_keyboard(),
     )
     await callback.answer()
 
@@ -279,7 +332,7 @@ async def response_photo_received(message: Message, state: FSMContext, session):
     await message.answer("Напишите описание игрушки и сообщение продавцу одним сообщением.")
 
 
-@router.message(ResponseStates.wait_photo, F.text == BTN_BACK_TO_MENU)
+@router.message(ResponseStates.wait_photo, F.text == BTN_CANCEL)
 async def response_back(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(MAIN_MENU_STATE)
@@ -288,7 +341,7 @@ async def response_back(message: Message, state: FSMContext):
 
 @router.message(ResponseStates.wait_description, F.text)
 async def response_description_received(message: Message, state: FSMContext, session, bot: Bot):
-    if message.text == BTN_BACK_TO_MENU:
+    if message.text == BTN_CANCEL:
         await state.clear()
         await state.set_state(MAIN_MENU_STATE)
         await message.answer("Главное меню.", reply_markup=main_menu_keyboard())
@@ -394,15 +447,18 @@ async def response_confirm_edit(callback: CallbackQuery, state: FSMContext, sess
         builder = InlineKeyboardBuilder()
         for lst in listings:
             builder.row(InlineKeyboardButton(text=f"Отправить эту: {lst.code}", callback_data=f"resp_use:{lst.id}"))
-        builder.row(InlineKeyboardButton(text="Создать новую", callback_data="resp_create_new"))
+        builder.row(InlineKeyboardButton(text="Создать новый отклик", callback_data="resp_create_new"))
         await state.set_state(ResponseStates.choose_listing)
-        await callback.message.answer("Выберите имеющуюся заявку или создайте новую для отклика:", reply_markup=builder.as_markup())
+        await callback.message.answer(
+            "Выберите имеющуюся заявку или создайте новый отклик для этой заявки:",
+            reply_markup=builder.as_markup(),
+        )
         await callback.answer()
         return
     await state.set_state(ResponseStates.wait_photo)
     await callback.message.answer(
         f"Код отклика: {data['response_code']}. Сделайте фото игрушки с бумажкой с этим кодом и отправьте фото.",
-        reply_markup=back_to_menu_keyboard(),
+        reply_markup=cancel_keyboard(),
     )
     await callback.answer()
 

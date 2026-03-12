@@ -3,7 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from bot.texts.menu import BTN_BACK_TO_MENU
+from bot.texts.menu import BTN_BACK_TO_MENU, BTN_CANCEL
 from bot.texts.listing import (
     CODE_PROMPT,
     CHOOSE_CATEGORY,
@@ -15,7 +15,7 @@ from bot.texts.listing import (
     BTN_EDIT,
 )
 from bot.texts.errors import NOT_A_PHOTO, NOT_TEXT
-from bot.keyboards.common import back_to_menu_keyboard
+from bot.keyboards.common import back_to_menu_keyboard, cancel_keyboard
 from bot.keyboards.menu import main_menu_keyboard
 from bot.keyboards.report import report_button_row
 from bot.keyboards.categories import (
@@ -126,7 +126,7 @@ async def start_listing_create(message: Message, state: FSMContext, session):
     code = await generate_unique_code(session)
     await state.update_data(listing_code=code, listing_user_id=user.id)
     await state.set_state(ListingCreateStates.wait_photo)
-    await message.answer(CODE_PROMPT.format(code=code), reply_markup=back_to_menu_keyboard())
+    await message.answer(CODE_PROMPT.format(code=code), reply_markup=cancel_keyboard())
 
 
 @router.callback_query(F.data == "menu:new_listing")
@@ -158,7 +158,7 @@ async def start_listing_create_callback(callback: CallbackQuery, state: FSMConte
     code = await generate_unique_code(session)
     await state.update_data(listing_code=code, listing_user_id=user.id)
     await state.set_state(ListingCreateStates.wait_photo)
-    await callback.message.answer(CODE_PROMPT.format(code=code), reply_markup=back_to_menu_keyboard())
+    await callback.message.answer(CODE_PROMPT.format(code=code), reply_markup=cancel_keyboard())
     await callback.answer()
 
 
@@ -176,7 +176,7 @@ async def listing_buy_sub(callback: CallbackQuery, state: FSMContext, session):
     await state.update_data(listing_code=code, listing_user_id=user.id)
     await state.set_state(ListingCreateStates.wait_photo)
     await callback.answer("Подписка подключена.")
-    await callback.message.answer(CODE_PROMPT.format(code=code), reply_markup=back_to_menu_keyboard())
+    await callback.message.answer(CODE_PROMPT.format(code=code), reply_markup=cancel_keyboard())
 
 
 @router.callback_query(F.data == "listing_back_menu")
@@ -201,7 +201,7 @@ async def listing_photo_received(message: Message, state: FSMContext, session):
 
 @router.message(ListingCreateStates.wait_photo, F.text)
 async def listing_photo_not_photo(message: Message, state: FSMContext):
-    if message.text == BTN_BACK_TO_MENU:
+    if message.text == BTN_CANCEL:
         await state.clear()
         await state.set_state(MAIN_MENU_STATE)
         await message.answer("Главное меню.", reply_markup=main_menu_keyboard())
@@ -247,7 +247,7 @@ async def listing_age_ignore(message: Message):
 
 @router.message(ListingCreateStates.wait_description, F.text)
 async def listing_description_received(message: Message, state: FSMContext, session):
-    if message.text == BTN_BACK_TO_MENU:
+    if message.text == BTN_CANCEL:
         await state.clear()
         await state.set_state(MAIN_MENU_STATE)
         await message.answer("Главное меню.", reply_markup=main_menu_keyboard())
