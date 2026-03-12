@@ -10,6 +10,7 @@ if __name__ == "__main__":
         sys.path.insert(0, str(root))
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -71,7 +72,10 @@ async def main():
     log.info("Running migrations...")
     run_migrations()
     log.info("Starting bot...")
-    bot = Bot(token=config.BOT_TOKEN, parse_mode=ParseMode.HTML)
+    bot = Bot(
+        token=config.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     dp = Dispatcher()
 
     dp.message.middleware(DbSessionMiddleware())
