@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery
 
 from bot.texts.menu import BTN_MY_SUBSCRIPTION, BTN_REFERRAL
 from bot.keyboards.menu import main_menu_keyboard
-from bot.services.user import get_user_by_telegram_id, get_referrals_count_by_user
+from bot.services.user import get_user_by_telegram_id, get_or_create_user, get_referrals_count_by_user
 from bot.services.subscription import get_active_subscription
 from bot.config import load_config
 
@@ -20,10 +20,12 @@ async def my_subscription(message: Message, state: FSMContext, session):
     await state.clear()
     if not message.from_user:
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
-    if not user:
-        await message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+    )
     sub = await get_active_subscription(session, user.id)
     if sub:
         now = datetime.now(timezone.utc)
@@ -49,11 +51,12 @@ async def my_subscription_callback(callback, state: FSMContext, session):
     if not callback.from_user:
         await callback.answer()
         return
-    user = await get_user_by_telegram_id(session, callback.from_user.id)
-    if not user:
-        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        await callback.answer()
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        first_name=callback.from_user.first_name,
+    )
     sub = await get_active_subscription(session, user.id)
     if sub:
         now = datetime.now(timezone.utc)
@@ -94,10 +97,7 @@ def _build_referral_link(bot_username: str, user_id: int) -> str:
 
 
 async def _send_referral_info(target_message, session, telegram_user_id: int, bot) -> None:
-    user = await get_user_by_telegram_id(session, telegram_user_id)
-    if not user:
-        await target_message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        return
+    user, _ = await get_or_create_user(session, telegram_id=telegram_user_id)
     referrals_count = await get_referrals_count_by_user(session, user.id)
     me = await bot.get_me()
     if me.username:

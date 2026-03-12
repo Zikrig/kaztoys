@@ -8,7 +8,7 @@ from bot.keyboards.menu import main_menu_keyboard
 from bot.keyboards.common import back_to_menu_keyboard, cancel_keyboard
 from bot.keyboards.report import report_button_row
 from bot.texts.listing import BTN_CONFIRM_SEND, BTN_EDIT
-from bot.services.user import get_user_by_telegram_id
+from bot.services.user import get_user_by_telegram_id, get_or_create_user
 from bot.services.listing import get_open_listings_by_user, get_listing_by_id
 from bot.services.response import (
     generate_unique_response_code,
@@ -36,10 +36,12 @@ async def my_responses(message: Message, state: FSMContext, session):
     await state.clear()
     if not message.from_user:
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
-    if not user:
-        await message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+    )
     responses = await get_responses_by_user(session, user.id)
     if not responses:
         await message.answer("У вас пока нет откликов.", reply_markup=main_menu_keyboard())
@@ -76,11 +78,12 @@ async def my_responses_callback(callback: CallbackQuery, state: FSMContext, sess
         await callback.answer()
         return
     await state.clear()
-    user = await get_user_by_telegram_id(session, callback.from_user.id)
-    if not user:
-        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        await callback.answer()
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        first_name=callback.from_user.first_name,
+    )
     responses = await get_responses_by_user(session, user.id)
     if not responses:
         await callback.message.answer("У вас пока нет откликов.", reply_markup=main_menu_keyboard())
@@ -128,11 +131,12 @@ async def response_after_search_offer(callback: CallbackQuery, state: FSMContext
     if not callback.from_user:
         await callback.answer()
         return
-    user = await get_user_by_telegram_id(session, callback.from_user.id)
-    if not user:
-        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        await callback.answer()
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        first_name=callback.from_user.first_name,
+    )
     active = await has_active_subscription(session, user.id)
     if not active:
         from aiogram.types import InlineKeyboardButton

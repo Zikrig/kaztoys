@@ -3,7 +3,7 @@ from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from bot.keyboards.menu import main_menu_keyboard
-from bot.services.user import get_user_by_telegram_id
+from bot.services.user import get_user_by_telegram_id, get_or_create_user
 from bot.services.listing import get_listing_by_id
 from bot.services.response import get_responses_by_listing, get_response_by_id
 from bot.services.match import create_match, confirm_deal, cancel_deal, get_pending_matches_for_user, get_match_by_id
@@ -46,10 +46,12 @@ async def open_unconfirmed_matches(message, state: FSMContext, session, bot: Bot
     await state.clear()
     if not message.from_user:
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
-    if not user:
-        await message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+    )
     has_matches = await send_pending_matches(message, session, user)
     if not has_matches:
         await message.answer("Нет неподтверждённых сделок.", reply_markup=main_menu_keyboard())
@@ -63,11 +65,12 @@ async def open_unconfirmed_matches_callback(callback: CallbackQuery, state: FSMC
     if not callback.from_user:
         await callback.answer()
         return
-    user = await get_user_by_telegram_id(session, callback.from_user.id)
-    if not user:
-        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        await callback.answer()
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        first_name=callback.from_user.first_name,
+    )
     has_matches = await send_pending_matches(callback.message, session, user)
     if not has_matches:
         await callback.message.answer("Нет неподтверждённых сделок.", reply_markup=main_menu_keyboard())

@@ -19,7 +19,7 @@ from bot.keyboards.common import back_to_menu_keyboard
 from bot.keyboards.report import report_button_row
 from bot.keyboards.categories import category_search_keyboard, age_search_keyboard, CATEGORIES, AGES
 from bot.keyboards.districts import district_search_keyboard
-from bot.services.user import get_user_by_telegram_id
+from bot.services.user import get_user_by_telegram_id, get_or_create_user
 from bot.services.search import (
     save_search_filters,
     get_search_filters,
@@ -67,10 +67,12 @@ async def start_search(message: Message, state: FSMContext, session, bot: Bot):
     if not message.from_user:
         return
     await state.clear()
-    user = await get_user_by_telegram_id(session, message.from_user.id)
-    if not user:
-        await message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+    )
     filters = await get_search_filters(session, user.id)
     if filters and filters.category and filters.age_group and filters.district:
         await state.update_data(
@@ -96,11 +98,12 @@ async def start_search_callback(callback: CallbackQuery, state: FSMContext, sess
         await callback.answer()
         return
     await state.clear()
-    user = await get_user_by_telegram_id(session, callback.from_user.id)
-    if not user:
-        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        await callback.answer()
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        first_name=callback.from_user.first_name,
+    )
     filters = await get_search_filters(session, user.id)
     if filters and filters.category and filters.age_group and filters.district:
         await state.update_data(
@@ -155,11 +158,12 @@ async def search_district_chosen(callback: CallbackQuery, state: FSMContext, ses
         if not callback.from_user:
             await callback.answer()
             return
-        user = await get_user_by_telegram_id(session, callback.from_user.id)
-        if not user:
-            await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-            await callback.answer()
-            return
+        user, _ = await get_or_create_user(
+            session,
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+        )
         await state.clear()
         await state.update_data(search_user_id=user.id, search_skip_count=0, search_hint_shown=False)
         await state.set_state(SearchStates.wait_category)

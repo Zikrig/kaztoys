@@ -26,7 +26,7 @@ from bot.keyboards.categories import (
     CATEGORY_BABIES,
     AGE_0_2,
 )
-from bot.services.user import get_user_by_telegram_id
+from bot.services.user import get_user_by_telegram_id, get_or_create_user
 from bot.services.listing import (
     generate_unique_code,
     create_listing,
@@ -167,10 +167,12 @@ async def listing_buy_sub(callback: CallbackQuery, state: FSMContext, session):
     if not callback.from_user:
         await callback.answer()
         return
-    user = await get_user_by_telegram_id(session, callback.from_user.id)
-    if not user:
-        await callback.answer("Сначала нажмите /start.")
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        first_name=callback.from_user.first_name,
+    )
     await create_subscription(session, user.id, days=14)
     code = await generate_unique_code(session)
     await state.update_data(listing_code=code, listing_user_id=user.id)
@@ -327,10 +329,12 @@ async def my_listings(message: Message, state: FSMContext, session):
         return
     await state.clear()
     await state.set_state(MAIN_MENU_STATE)
-    user = await get_user_by_telegram_id(session, message.from_user.id)
-    if not user:
-        await message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+    )
     listings = await get_open_listings_by_user(session, user.id)
     if not listings:
         await message.answer("У вас пока нет открытых заявок.", reply_markup=main_menu_keyboard())
@@ -355,11 +359,12 @@ async def my_listings_callback(callback: CallbackQuery, state: FSMContext, sessi
         return
     await state.clear()
     await state.set_state(MAIN_MENU_STATE)
-    user = await get_user_by_telegram_id(session, callback.from_user.id)
-    if not user:
-        await callback.message.answer("Сначала /start.", reply_markup=main_menu_keyboard())
-        await callback.answer()
-        return
+    user, _ = await get_or_create_user(
+        session,
+        telegram_id=callback.from_user.id,
+        username=callback.from_user.username,
+        first_name=callback.from_user.first_name,
+    )
     listings = await get_open_listings_by_user(session, user.id)
     if not listings:
         await callback.message.answer("У вас пока нет открытых заявок.", reply_markup=main_menu_keyboard())
