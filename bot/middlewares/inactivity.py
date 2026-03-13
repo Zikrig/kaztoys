@@ -48,7 +48,7 @@ class InactivityMiddleware(BaseMiddleware):
             await asyncio.sleep(INACTIVITY_SECONDS)
             _user_timers.pop(user_id, None)
             current_state = await state.get_state()
-            if current_state == self.default_state:
+            if current_state is None or current_state == self.default_state:
                 return
             await state.clear()
             await state.set_state(self.default_state)
